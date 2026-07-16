@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ComplyRoute — Gateway Dashboard v1.0.3</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
@@ -36,7 +36,7 @@
     --radius-lg:   12px;
   }
 
-  html, body { height: 100%; }
+  html, body { height: 100%; height: -webkit-fill-available; height: 100dvh; }
   body {
     background: var(--bg);
     color: var(--txt);
@@ -44,10 +44,17 @@
     font-size: 14px;
     line-height: 1.5;
     overflow: hidden;
+    -webkit-text-size-adjust: 100%;
   }
 
   /* ── LAYOUT ── */
-  .shell { display: flex; height: 100vh; overflow: hidden; }
+  .shell {
+    display: flex;
+    height: 100vh;
+    height: -webkit-fill-available;
+    height: 100dvh;
+    overflow: hidden;
+  }
 
   /* ── SIDEBAR ── */
   .sidebar {
@@ -421,6 +428,85 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--txt3); }
+
+  /* ── MOBILE NAV ── */
+  .hamburger-btn { display: none; }
+  .sidebar-backdrop { display: none; }
+
+  /* ── TOUCH / iOS ── */
+  .content, .table-wrap { -webkit-overflow-scrolling: touch; }
+  .btn, .icon-btn, .hamburger-btn, .nav-item, .tab {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 1100px) {
+    .grid-4 { grid-template-columns: repeat(2,1fr); }
+  }
+
+  @media (max-width: 900px) {
+    .sidebar {
+      position: fixed; top: 0; left: 0; bottom: 0; width: 240px; min-width: 240px;
+      z-index: 1100;
+      transform: translateX(-100%);
+      transition: transform 0.2s ease;
+      box-shadow: 2px 0 20px rgba(0,0,0,0.5);
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+    }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-backdrop.open {
+      display: block;
+      position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+      z-index: 1050;
+    }
+    .hamburger-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 40px; height: 40px;
+      border: 1px solid var(--border2); border-radius: var(--radius);
+      background: transparent; color: var(--txt2);
+      cursor: pointer; flex-shrink: 0;
+    }
+    .hamburger-btn:hover { background: var(--surface3); color: var(--txt); }
+    .topbar {
+      padding-left: calc(14px + env(safe-area-inset-left));
+      padding-right: calc(14px + env(safe-area-inset-right));
+    }
+    .icon-btn { width: 40px; height: 40px; }
+  }
+
+  @media (max-width: 768px) {
+    .content {
+      padding: 14px;
+      padding-bottom: calc(14px + env(safe-area-inset-bottom));
+    }
+    .grid-4, .grid-3 { grid-template-columns: repeat(2,1fr); }
+    .grid-2, .form-grid { grid-template-columns: 1fr; }
+    .sub-grid { grid-template-columns: repeat(2,1fr); }
+    .topbar {
+      height: auto; min-height: 56px; flex-wrap: wrap;
+      padding-top: 10px; padding-bottom: 10px; gap: 8px;
+    }
+    .topbar-right { flex-wrap: wrap; gap: 6px; width: 100%; }
+    .topbar-right .btn { padding: 9px 10px; font-size: 12px; flex: 1 1 auto; justify-content: center; }
+    .tabs-bar { overflow-x: auto; white-space: nowrap; padding: 0 14px; -webkit-overflow-scrolling: touch; }
+    .metric-value { font-size: 21px; }
+    .card { padding: 14px; }
+    .flow-row { flex-direction: column; align-items: stretch; }
+    .flow-arrow { transform: rotate(90deg); align-self: center; }
+    /* Impede o zoom automático do Safari ao focar em campos (exige >=16px) */
+    .form-input, select.form-input, input, textarea, select { font-size: 16px !important; }
+  }
+
+  @media (max-width: 480px) {
+    .grid-4, .grid-3, .sub-grid { grid-template-columns: 1fr; }
+    #loginScreen { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+    #loginScreen form { width: 88vw !important; max-width: 340px; padding: 24px 18px !important; }
+    .page-title { font-size: 15px; }
+    .metric-value { font-size: 19px; }
+  }
 </style>
 </head>
 <body>
@@ -476,10 +562,13 @@
     </div>
   </aside>
 
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
   <!-- MAIN -->
   <div class="main">
     <header class="topbar">
       <div class="topbar-left">
+        <button class="hamburger-btn" onclick="toggleSidebar()" title="Menu" aria-label="Abrir menu"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
         <span class="page-title" id="pageTitle">Visão Geral</span>
         <span class="badge badge-green"><svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>Produção</span>
       </div>
@@ -1130,7 +1219,7 @@
           </div>
           <div class="card">
             <div class="section-title" style="margin-bottom:16px">&#9881; Funcionalidades do Sistema</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div class="grid-2" style="margin-bottom:0">
               <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border2)"><span style="font-size:13px">Roteamento Inteligente Automático</span><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
               <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border2)"><span style="font-size:13px">Failover Automático de Subadquirente</span><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
               <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border2)"><span style="font-size:13px">Retry Automático em Timeout</span><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
@@ -1295,7 +1384,7 @@
           </div>
           <div class="card">
             <div class="section-title" style="margin-bottom:16px">&#128101; Perfis de Acesso</div>
-            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+            <div class="grid-4" style="margin-bottom:0">
               <div style="background:var(--surface2);border:1px solid var(--cyan-border);border-radius:8px;padding:14px">
                 <div style="font-size:12px;font-weight:700;color:var(--cyan);margin-bottom:8px">Administrador</div>
                 <div style="font-size:11px;color:var(--txt2);line-height:1.6">Acesso total a todas as funções, configurações, usuários e dados financeiros.</div>
@@ -1325,6 +1414,15 @@
 <script>
 /* ─── AUTH / API ─── */
 const API_BASE = '/api/v1';
+
+// Logout forçado: navegar para ?logout=1 sempre limpa a sessão local,
+// mesmo que a interface do app esteja travada/sem resposta.
+if (new URLSearchParams(location.search).get('logout') === '1') {
+  localStorage.removeItem('cr_access_token');
+  localStorage.removeItem('cr_refresh_token');
+  history.replaceState(null, '', location.pathname);
+}
+
 let ACCESS_TOKEN  = localStorage.getItem('cr_access_token')  || null;
 let REFRESH_TOKEN = localStorage.getItem('cr_refresh_token') || null;
 
@@ -1470,6 +1568,15 @@ const FRAUD_EVENTS = [
 
 /* ─── NAVIGATION ─── */
 
+function toggleSidebar() {
+  document.querySelector('.sidebar').classList.toggle('open');
+  document.getElementById('sidebarBackdrop').classList.toggle('open');
+}
+function closeSidebar() {
+  document.querySelector('.sidebar').classList.remove('open');
+  document.getElementById('sidebarBackdrop').classList.remove('open');
+}
+
 function navigateTo(panel) {
   // Hide all panels
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -1496,6 +1603,7 @@ function navigateTo(panel) {
   // Activate clicked nav item
   var navItem = document.querySelector('.nav-item[data-panel="' + panel + '"]');
   if (navItem) navItem.classList.add('active');
+  closeSidebar();
 }
 
 function switchCfg(el, id) {
