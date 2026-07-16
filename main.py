@@ -107,7 +107,7 @@ async def jwt_auth_middleware(request: Request, call_next):
 # ── Middlewares ────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cfg.ALLOWED_ORIGINS,
+    allow_origins=cfg.allowed_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -115,7 +115,7 @@ app.add_middleware(
 
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=["*"] if cfg.APP_ENV == "development" else cfg.ALLOWED_HOSTS,
+    allowed_hosts=["*"] if cfg.APP_ENV == "development" else cfg.allowed_hosts_list,
 )
 
 # ── Prometheus metrics ─────────────────────────────────────

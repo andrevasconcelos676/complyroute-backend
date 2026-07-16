@@ -1,7 +1,6 @@
 """Configurações da aplicação via variáveis de ambiente."""
 
 from functools import lru_cache
-from typing import List
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -15,8 +14,18 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     DEBUG: bool = False
     SECRET_KEY: str = "dev-secret-change-me"
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]
-    ALLOWED_HOSTS: List[str] = ["*"]
+    # Strings simples (não List[str]) para evitar que o pydantic-settings tente
+    # fazer JSON.parse do valor da env var — aceitam lista separada por vírgula.
+    ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    ALLOWED_HOSTS: str = "*"
+
+    @property
+    def allowed_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def allowed_hosts_list(self) -> list[str]:
+        return [h.strip() for h in self.ALLOWED_HOSTS.split(",") if h.strip()]
 
     # ── Database (local SQLite by default) ────────
     DATABASE_URL: str = "sqlite+aiosqlite:///./complyroute.db"
