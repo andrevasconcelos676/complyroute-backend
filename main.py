@@ -23,10 +23,10 @@ from app.api.v1.endpoints import (
     settings,
 )
 from app.core.config import settings as cfg
-from app.core.exceptions import AuthenticationError, register_exception_handlers
+from app.core.exceptions import AuthenticationError, ComplyRouteException, register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.security import decode_token
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from app.db.session import engine
 from app.db.base import Base, import_all_models
 
@@ -72,9 +72,18 @@ PUBLIC_PATHS = {
 }
 
 
+def _auth_error_response(exc: ComplyRouteException) -> JSONResponse:
+    return JSONResponse(status_code=exc.status_code, content={"error": exc.code, "message": exc.message})
+
+
 @app.middleware("http")
 async def jwt_auth_middleware(request: Request, call_next):
-    """Protege todos os endpoints, exceto login, refresh, health e documentação."""
+    """Protege todos os endpoints, exceto login, refresh, health e documentação.
+
+    Este middleware roda fora do ExceptionMiddleware do Starlette, então exceções
+    levantadas aqui nunca chegariam aos handlers de register_exception_handlers —
+    por isso a resposta de erro é montada e retornada diretamente aqui.
+    """
     path = request.url.path
 
     if request.method == "OPTIONS" or path in PUBLIC_PATHS or path.startswith("/docs") or path.startswith("/redoc"):
@@ -85,19 +94,19 @@ async def jwt_auth_middleware(request: Request, call_next):
 
     authorization = request.headers.get("authorization", "")
     if not authorization.startswith("Bearer "):
-        raise AuthenticationError("Token de acesso ausente.")
+        return _auth_error_response(AuthenticationError("Token de acesso ausente."))
 
     token = authorization.removeprefix("Bearer ").strip()
     if not token:
-        raise AuthenticationError("Token de acesso ausente.")
+        return _auth_error_response(AuthenticationError("Token de acesso ausente."))
 
     try:
         payload = decode_token(token)
-    except Exception as exc:  # pragma: no cover - exercised at runtime
-        raise AuthenticationError("Token inválido ou expirado.") from exc
+    except Exception:
+        return _auth_error_response(AuthenticationError("Token inválido ou expirado."))
 
     if payload.get("type") != "access":
-        raise AuthenticationError("Token inválido.")
+        return _auth_error_response(AuthenticationError("Token inválido."))
 
     request.state.user = payload
     request.state.user_id = payload.get("sub")

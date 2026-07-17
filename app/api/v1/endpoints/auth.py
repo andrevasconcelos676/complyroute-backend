@@ -1,5 +1,7 @@
 """Endpoints de Autenticação — /api/v1/auth"""
 
+import uuid
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,10 +61,13 @@ async def refresh_token(payload: RefreshRequest, db: AsyncSession = Depends(get_
         data = decode_token(payload.refresh_token)
         if data.get("type") != "refresh":
             raise AuthenticationError("Token inválido.")
+        user_id = uuid.UUID(data["sub"])
+    except AuthenticationError:
+        raise
     except Exception:
         raise AuthenticationError("Refresh token inválido ou expirado.")
 
-    user = await db.get(User, data["sub"])
+    user = await db.get(User, user_id)
     if not user or not user.is_active:
         raise AuthenticationError("Usuário não encontrado.")
 
