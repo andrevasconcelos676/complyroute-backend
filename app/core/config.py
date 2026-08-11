@@ -91,6 +91,11 @@ class Settings(BaseSettings):
     ORENDAPAY_CLIENT_SECRET: str = ""
     ORENDAPAY_API_URL: str = "https://api.orendapay.com.br"
 
+    NECTA_CLIENT_SECRET: str = ""       # clientSecret do token de API (client credentials)
+    NECTA_SECRET_KEY: str = ""          # secretKey do token de API
+    NECTA_API_URL: str = "https://api-gateway.nectaco.com.br"
+    NECTA_WEBHOOK_SECRET: str = ""      # whsec_... — assinatura svix dos eventos recebidos
+
     # ── Observability ──────────────────────────────
     SENTRY_DSN: str = ""
     LOG_LEVEL: str = "INFO"

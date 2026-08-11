@@ -92,6 +92,11 @@ async def jwt_auth_middleware(request: Request, call_next):
     if path.startswith("/api/v1/auth/login") or path.startswith("/api/v1/auth/refresh"):
         return await call_next(request)
 
+    if path == "/api/v1/acquirers/necta/webhook":
+        # Chamado pela Necta, não pelo usuário — autenticado por assinatura svix
+        # (verify_necta_webhook_signature), não por JWT do ComplyRoute.
+        return await call_next(request)
+
     authorization = request.headers.get("authorization", "")
     if not authorization.startswith("Bearer "):
         return _auth_error_response(AuthenticationError("Token de acesso ausente."))

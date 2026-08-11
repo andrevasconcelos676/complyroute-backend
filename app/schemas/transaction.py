@@ -15,10 +15,22 @@ class CardData(BaseModel):
     country: str = Field(default="BR", max_length=2)
 
 
+class CustomerAddress(BaseModel):
+    street: str
+    number: str
+    neighborhood: str
+    city: str
+    state: str
+    postal_code: str
+    country: str = Field(default="BR", max_length=2)
+
+
 class CustomerData(BaseModel):
     name: str
     document: str                # CPF ou CNPJ (sem formatação)
     email: str
+    phone_number: str | None = None
+    address: CustomerAddress | None = None
 
 
 class TransactionCreate(BaseModel):

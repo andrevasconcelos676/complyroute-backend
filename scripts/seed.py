@@ -21,6 +21,7 @@ ACQUIRERS_SEED = [
     {"name":"zoop",      "display_name":"Zoop",       "priority":7,  "traffic_pct":10.0, "supports_debit":True,  "supports_pix":True,  "supports_boleto":True},
     {"name":"asaas",     "display_name":"Asaas",      "priority":8,  "traffic_pct":11.0, "supports_debit":True,  "supports_pix":True,  "supports_boleto":True},
     {"name":"orendapay", "display_name":"OrendaPay",  "priority":9,  "traffic_pct":8.0,  "supports_debit":False, "supports_pix":True,  "supports_boleto":True},
+    {"name":"necta",     "display_name":"Necta Multi-Pay", "priority":10, "traffic_pct":0.0, "supports_debit":False, "supports_pix":True, "supports_boleto":True, "api_url":"https://api-gateway.nectaco.com.br"},
 ]
 
 RULES_SEED = [

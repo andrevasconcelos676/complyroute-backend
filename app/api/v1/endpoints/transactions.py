@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import structlog
 
-from app.core.exceptions import NotFoundError, FraudBlockError, RoutingError
+from app.core.exceptions import NotFoundError, FraudBlockError, RoutingError, AcquirerError
 from app.db.session import get_db
 from app.models.transaction import Transaction
 from app.schemas.transaction import (
@@ -20,6 +20,7 @@ from app.schemas.transaction import (
 )
 from app.services.routing_engine import routing_engine, TransactionContext
 from app.services.fraud_engine import fraud_engine, FraudContext
+from app.services.acquirers import AcquirerClientFactory
 
 router = APIRouter()
 log = structlog.get_logger()
@@ -90,17 +91,51 @@ async def create_transaction(
         raise RoutingError(decision.block_reason or "Transação bloqueada pelo motor de roteamento.")
 
     # ── 3. Envio ao subadquirente ─────────────────────────────
-    # TODO: instanciar o cliente do subadquirente via factory e chamar .process()
-    # acquirer_client = AcquirerClientFactory.get(decision.acquirer)
-    # acquirer_response = await acquirer_client.process(payload)
+    acquirer_client = AcquirerClientFactory.get(decision.acquirer)
 
-    # Simulação de resposta (substituir pela integração real)
-    acquirer_response = {
-        "status": "approved",
-        "authorization_code": "SIM-" + uuid.uuid4().hex[:6].upper(),
-        "nsu": uuid.uuid4().hex[:8].upper(),
-        "latency_ms": 312,
-    }
+    if acquirer_client is not None:
+        try:
+            sale_result = await acquirer_client.create_sale(payload)
+        except AcquirerError as e:
+            txn = Transaction(
+                amount=payload.amount,
+                currency=payload.currency,
+                method=payload.method,
+                installments=payload.installments,
+                status="declined",
+                acquirer=decision.acquirer,
+                routing_rule_applied=decision.trail[0].name if decision.trail else None,
+                fraud_score=fraud_result.score,
+                customer_name=payload.customer.name,
+                customer_document=payload.customer.document,
+                customer_email=payload.customer.email,
+                card_last4=payload.card.number[-4:] if payload.card else None,
+                card_country=payload.card.country if payload.card else "BR",
+                card_bin=fraud_ctx.card_bin,
+                error_message=e.message,
+                metadata_=payload.metadata,
+            )
+            db.add(txn)
+            await db.flush()
+            raise
+        finally:
+            await acquirer_client.aclose()
+
+        acquirer_response = {
+            "status": sale_result.status,
+            "acquirer_txn_id": sale_result.acquirer_txn_id,
+            "authorization_code": sale_result.authorization_code,
+            "nsu": sale_result.nsu,
+            "latency_ms": sale_result.latency_ms,
+        }
+    else:
+        # Simulação de resposta — subadquirentes sem integração real configurada.
+        acquirer_response = {
+            "status": "approved",
+            "authorization_code": "SIM-" + uuid.uuid4().hex[:6].upper(),
+            "nsu": uuid.uuid4().hex[:8].upper(),
+            "latency_ms": 312,
+        }
 
     # ── 4. Persistência ───────────────────────────────────────
     txn = Transaction(
@@ -110,6 +145,7 @@ async def create_transaction(
         installments=payload.installments,
         status=acquirer_response["status"],
         acquirer=decision.acquirer,
+        acquirer_txn_id=acquirer_response.get("acquirer_txn_id"),
         authorization_code=acquirer_response.get("authorization_code"),
         nsu=acquirer_response.get("nsu"),
         routing_rule_applied=decision.trail[0].name if decision.trail else None,
@@ -187,8 +223,16 @@ async def refund_transaction(
         from app.core.exceptions import ValidationError
         raise ValidationError(f"Transação com status '{txn.status}' não pode ser estornada.")
 
-    # TODO: chamar API do subadquirente para estorno
-    txn.status = "refunded"
+    acquirer_client = AcquirerClientFactory.get(txn.acquirer)
+    if acquirer_client is not None and txn.acquirer_txn_id:
+        try:
+            sale_result = await acquirer_client.refund_sale(txn.acquirer_txn_id, payload.amount)
+        finally:
+            await acquirer_client.aclose()
+        txn.status = sale_result.status
+    else:
+        # Simulação — subadquirentes sem integração real configurada.
+        txn.status = "refunded"
     await db.flush()
 
     log.info("transaction.refund", txn_id=str(txn_id), amount=payload.amount)
