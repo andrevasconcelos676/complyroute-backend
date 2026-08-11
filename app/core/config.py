@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     # ── App ────────────────────────────────────────
     APP_NAME: str = "ComplyRoute"
-    APP_VERSION: str = "1.0.0"
+    APP_VERSION: str = "1.3.1"
     APP_ENV: str = "development"
     DEBUG: bool = False
     SECRET_KEY: str = "dev-secret-change-me"
