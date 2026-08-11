@@ -1,0 +1,18 @@
+name: Keep Render service warm
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /health
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 https://complyroute.com.br/health)
+          echo "GET /health -> $status"
+          if [ "$status" -lt 200 ] || [ "$status" -ge 400 ]; then
+            echo "::warning::Health check returned HTTP $status"
+          fi
