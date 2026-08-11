@@ -10,6 +10,7 @@ from typing import Any
 
 import structlog
 
+from app.core.config import settings
 from app.core.exceptions import FraudBlockError, RoutingError
 
 log = structlog.get_logger()
@@ -152,7 +153,7 @@ class RoutingEngine:
         blocked = False
         block_reason: str | None = None
 
-        # ── Antifraude primeiro (prioridade máxima) ───────────
+        # ── Antifraude primeiro (prioridade máxima, inclusive sobre o override abaixo) ──
         if ctx.fraud_score < 50:
             result = RuleResult(10, "Score antifraude < 50 → bloquear", True, "block", None)
             trail.append(result)
@@ -163,6 +164,17 @@ class RoutingEngine:
                 block_reason=f"Score antifraude insuficiente ({ctx.fraud_score}/100)",
                 trail=trail,
             )
+
+        # ── Override manual (validação/ops, restrito a não-produção) ──
+        # metadata.force_acquirer ignora as 12 regras e força o roteamento para um
+        # subadquirente específico — usado para validar integrações novas (ex.: Necta)
+        # sem alterar o roteamento padrão de ninguém mais. Nunca disponível em produção:
+        # não é uma feature para o chamador da API escolher o subadquirente à vontade.
+        forced = ctx.metadata.get("force_acquirer")
+        if forced and settings.APP_ENV != "production":
+            result = RuleResult(0, f"Override manual → {forced}", True, "route", forced)
+            log.info("routing.force_acquirer", acquirer=forced)
+            return RoutingDecision(acquirer=forced, blocked=False, block_reason=None, trail=[result])
 
         # ── Avaliar regras em sequência ───────────────────────
         for rule in RULES:

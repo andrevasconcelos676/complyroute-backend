@@ -59,6 +59,36 @@ def test_debit_routes_to_cielo(engine):
     assert decision.acquirer == "cielo"
 
 
+def test_force_acquirer_override_routes_directly(engine, monkeypatch):
+    from app.services import routing_engine as routing_engine_module
+    monkeypatch.setattr(routing_engine_module.settings, "APP_ENV", "development")
+
+    ctx = TransactionContext(method="pix", amount=10000, fraud_score=90, metadata={"force_acquirer": "necta"})
+    decision = engine.evaluate(ctx)
+    assert not decision.blocked
+    assert decision.acquirer == "necta"
+
+
+def test_force_acquirer_override_disabled_in_production(engine, monkeypatch):
+    from app.services import routing_engine as routing_engine_module
+    monkeypatch.setattr(routing_engine_module.settings, "APP_ENV", "production")
+
+    ctx = TransactionContext(method="pix", amount=10000, fraud_score=90, metadata={"force_acquirer": "necta"})
+    decision = engine.evaluate(ctx)
+    assert not decision.blocked
+    assert decision.acquirer == "rede"  # regra normal de PIX, override ignorado
+
+
+def test_force_acquirer_override_does_not_bypass_fraud_block(engine, monkeypatch):
+    from app.services import routing_engine as routing_engine_module
+    monkeypatch.setattr(routing_engine_module.settings, "APP_ENV", "development")
+
+    ctx = TransactionContext(method="pix", amount=10000, fraud_score=10, metadata={"force_acquirer": "necta"})
+    decision = engine.evaluate(ctx)
+    assert decision.blocked
+    assert decision.acquirer is None
+
+
 def test_decision_has_trail(engine):
     ctx = TransactionContext(method="pix", amount=10000, fraud_score=90)
     decision = engine.evaluate(ctx)

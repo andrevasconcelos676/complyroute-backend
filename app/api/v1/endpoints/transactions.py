@@ -84,6 +84,7 @@ async def create_transaction(
         installments=payload.installments,
         card_country=payload.card.country if payload.card else "BR",
         fraud_score=fraud_result.score,
+        metadata=payload.metadata or {},
     )
     decision = routing_engine.evaluate(routing_ctx)
 
