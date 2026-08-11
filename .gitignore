@@ -44,3 +44,6 @@ logs/
 
 # Docker
 .dockerignore
+
+# Documentação gerada — entregável direto, não faz parte do app implantado
+docs/
