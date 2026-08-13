@@ -48,7 +48,9 @@ async def test_create_pix_sale_success():
         log.calls.append((request.method, request.url.path))
         if request.url.path == "/auth":
             return auth_response()
-        if request.url.path == "/sales/pix":
+        if request.url.path == "/sales":
+            body = json.loads(request.content)
+            assert body["paymentMethod"] == "pix"
             return httpx.Response(
                 201,
                 json={"id": "sale-uuid-1", "externalId": "ext-123", "status": {"name": "paid"}},
@@ -62,7 +64,7 @@ async def test_create_pix_sale_success():
     assert result.acquirer_txn_id == "sale-uuid-1"
     assert result.authorization_code == "ext-123"
     assert ("POST", "/auth") in log.calls
-    assert ("POST", "/sales/pix") in log.calls
+    assert ("POST", "/sales") in log.calls
     await client.aclose()
 
 
@@ -91,7 +93,7 @@ async def test_401_triggers_single_reauth_and_retry():
         if request.url.path == "/auth":
             state["auth_attempts"] += 1
             return auth_response(token=f"jwt-{state['auth_attempts']}")
-        if request.url.path == "/sales/pix":
+        if request.url.path == "/sales":
             state["sales_attempts"] += 1
             if state["sales_attempts"] == 1:
                 return httpx.Response(401, json={"message": "expired"})
@@ -147,7 +149,7 @@ async def test_credit_card_body_splits_expiry():
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/auth":
             return auth_response()
-        if request.url.path == "/sales/credit-card":
+        if request.url.path == "/sales":
             captured["body"] = json.loads(request.content)
             return httpx.Response(201, json={"id": "s1", "externalId": "e1", "status": {"name": "paid"}})
         raise AssertionError("unexpected request")
@@ -163,7 +165,27 @@ async def test_credit_card_body_splits_expiry():
     card = captured["body"]["creditCard"]
     assert card["expirationMonth"] == "12"
     assert card["expirationYear"] == "2030"
+    assert captured["body"]["paymentMethod"] == "credit_card"
     assert captured["body"]["installments"] == 3
+    await client.aclose()
+
+
+async def test_pix_forces_installments_to_one():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/auth":
+            return auth_response()
+        if request.url.path == "/sales":
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(201, json={"id": "s1", "externalId": "e1", "status": {"name": "paid"}})
+        raise AssertionError("unexpected request")
+
+    client = make_client(handler)
+    await client.create_sale(pix_payload(installments=5))
+
+    assert captured["body"]["installments"] == 1
+    assert captured["body"]["paymentMethod"] == "pix"
     await client.aclose()
 
 

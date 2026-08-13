@@ -76,7 +76,7 @@ _TOKEN_TTL_S = 25 * 60  # margem de segurança sob a expiração real do JWT (n�
 
 
 class NectaClient(AcquirerClient):
-    """Cliente HTTP para a Necta Multi-Pay API (auth M2M + vendas em um passo)."""
+    """Cliente HTTP para a Necta Multi-Pay API (auth M2M + criação de venda via `POST /sales`)."""
 
     def __init__(
         self,
@@ -153,27 +153,33 @@ class NectaClient(AcquirerClient):
 
     # ── Vendas ────────────────────────────────────────────────
 
+    _METHOD_MAP = {"pix": "pix", "credit": "credit_card", "boleto": "bank_slip"}
+
     async def create_sale(self, payload: Any) -> SaleResult:
         """
-        Cria e processa uma venda em um passo, escolhendo o endpoint pelo
-        método de pagamento (`payload.method`). `payload` é um
-        `TransactionCreate` (app.schemas.transaction).
+        Cria uma venda via `POST /sales` (endpoint genérico).
+
+        A documentação pública também lista endpoints "em um passo" por
+        método (`/sales/pix`, `/sales/credit-card`, `/sales/bank-slip`) — mas
+        eles retornam 404 de roteamento no ambiente real (confirmado em
+        11/08/2026 contra produção: existem no OpenAPI, não existem no
+        servidor). O genérico é o único caminho de criação de venda
+        comprovadamente ativo.
+
+        `payload` é um `TransactionCreate` (app.schemas.transaction).
         """
         method = payload.method
-        if method == "pix":
-            path, body = "/sales/pix", self._pix_body(payload)
-        elif method == "credit":
-            path, body = "/sales/credit-card", self._credit_card_body(payload)
-        elif method == "boleto":
-            path, body = "/sales/bank-slip", self._bank_slip_body(payload)
-        else:
+        payment_method = self._METHOD_MAP.get(method)
+        if payment_method is None:
             raise AcquirerError(
                 "necta",
-                f"Método '{method}' não suportado via venda em um passo (use pix, credit ou boleto).",
+                f"Método '{method}' não suportado (use pix, credit ou boleto).",
             )
 
+        body = self._sale_body(payload, payment_method)
+
         started = time.monotonic()
-        resp = await self._request("POST", path, json=body)
+        resp = await self._request("POST", "/sales", json=body)
         latency_ms = int((time.monotonic() - started) * 1000)
 
         data = resp.json()
@@ -238,35 +244,35 @@ class NectaClient(AcquirerClient):
             }
         return buyer
 
-    def _pix_body(self, payload: Any) -> dict:
-        return {
+    def _sale_body(self, payload: Any, payment_method: str) -> dict:
+        """
+        Corpo de `POST /sales`. `installments` é obrigatório no schema genérico
+        mesmo para pix/bank_slip (onde não faz sentido de negócio) — enviamos 1.
+
+        O schema documentado de `POST /sales` não lista `buyer`/`buyerId` (ao
+        contrário dos endpoints "em um passo"), mas o objeto `Sale` interno da
+        Necta claramente carrega um comprador — enviamos os dados mesmo assim;
+        campo desconhecido tende a ser ignorado, não rejeitado. Isso ainda não
+        foi validado contra produção (falta um token com contexto de
+        estabelecimento) — ajustar se a API rejeitar.
+        """
+        body: dict[str, Any] = {
             "totalAmount": payload.amount,
             "liquidAmount": payload.amount,
+            "paymentMethod": payment_method,
+            "installments": payload.installments if payment_method == "credit_card" else 1,
             "buyer": self._buyer_body(payload),
         }
-
-    def _credit_card_body(self, payload: Any) -> dict:
-        if not payload.card:
-            raise AcquirerError("necta", "Dados do cartão ausentes para pagamento em crédito.")
-        card = payload.card
-        month, _, year = card.expiry.partition("/")
-        return {
-            "totalAmount": payload.amount,
-            "liquidAmount": payload.amount,
-            "installments": payload.installments,
-            "buyer": self._buyer_body(payload),
-            "creditCard": {
+        if payment_method == "credit_card":
+            if not payload.card:
+                raise AcquirerError("necta", "Dados do cartão ausentes para pagamento em crédito.")
+            card = payload.card
+            month, _, year = card.expiry.partition("/")
+            body["creditCard"] = {
                 "holderName": card.holder,
                 "number": card.number,
                 "expirationMonth": month,
                 "expirationYear": year,
                 "cvv": card.cvv,
-            },
-        }
-
-    def _bank_slip_body(self, payload: Any) -> dict:
-        return {
-            "totalAmount": payload.amount,
-            "liquidAmount": payload.amount,
-            "buyer": self._buyer_body(payload),
-        }
+            }
+        return body
